@@ -369,6 +369,30 @@ defmodule Beacon.RuntimeRendererTest do
       # and path_info would be ["posts", "my-post"]. Here we test the extraction logic.
     end
 
+    test "exposes private.pubsub from the page snapshot extra" do
+      pubsub_set = %{"info" => ["andon_vin_tick"], "event" => []}
+
+      RuntimeRenderer.publish_page(@site, "params_pubsub", %{
+        template: "<div>vin ticker</div>",
+        path: "/vin",
+        extra: %{"pubsub" => pubsub_set}
+      })
+
+      assert {:ok, assigns} = RuntimeRenderer.handle_params_assigns(@site, "/vin", %{"path" => ["vin"]})
+      assert assigns.beacon.private.pubsub == pubsub_set
+    end
+
+    test "private.pubsub is nil for legacy snapshots without pubsub key" do
+      RuntimeRenderer.publish_page(@site, "params_legacy", %{
+        template: "<div>legacy page</div>",
+        path: "/legacy",
+        extra: %{"type" => "default"}
+      })
+
+      assert {:ok, assigns} = RuntimeRenderer.handle_params_assigns(@site, "/legacy", %{})
+      assert assigns.beacon.private.pubsub == nil
+    end
+
   end
 
 

@@ -1056,7 +1056,8 @@ defmodule Beacon.RuntimeRenderer do
         graphql_endpoint_names: graphql_endpoint_names,
         live_path: path_info,
         variant_roll: nil,
-        page_type: Map.get(manifest.extra, "type", "default")
+        page_type: Map.get(manifest.extra, "type", "default"),
+        pubsub: Map.get(manifest.extra, "pubsub")
       }
     }
 
