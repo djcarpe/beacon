@@ -468,6 +468,65 @@ defmodule Beacon.RuntimeRendererTest do
     end
   end
 
+  describe "scoped event-handler dispatch" do
+    # One site-wide event handler seeded for :my_site:
+    #   "ack" — sets socket.assigns.acked = true
+    #
+    # When the page's pubsub set only allows ["ack"]:
+    #   * handle_site_event(site, "ack", %{}, socket) => {:noreply, socket with :acked == true}
+    #
+    # When the page's pubsub set is empty []:
+    #   * handle_site_event(site, "ack", %{}, socket) => {:error, {:no_handler, "ack"}}
+    #
+    # When pubsub is nil (legacy/un-republished page):
+    #   * site-wide fallback runs — handle_site_event returns {:noreply, socket with :acked == true}
+
+    setup do
+      # Clear the event-handler cache so ensure_site_handlers_loaded re-queries DB for each test
+      :ets.delete(:beacon_runtime_poc, {:my_site, :handlers_load, :event})
+      :ets.match_delete(:beacon_runtime_poc, {{:my_site, :site_handler, :event, :_}, :_})
+
+      Beacon.Content.create_event_handler!(%{
+        site: :my_site,
+        name: "ack",
+        format: :elixir,
+        code: "{:noreply, Phoenix.Component.assign(socket, :acked, true)}"
+      })
+
+      :ok
+    end
+
+    defp event_scoped_socket(pubsub) do
+      %Phoenix.LiveView.Socket{
+        assigns: %{
+          __changed__: %{},
+          beacon: %{
+            site: :my_site,
+            private: %{pubsub: pubsub}
+          }
+        }
+      }
+    end
+
+    test "allowed event handler runs when page declares it" do
+      socket = event_scoped_socket(%{"info" => [], "event" => ["ack"]})
+      assert {:noreply, updated} = RuntimeRenderer.handle_site_event(:my_site, "ack", %{}, socket)
+      assert updated.assigns.acked == true
+    end
+
+    test "event handler is blocked when not in page's event set" do
+      socket = event_scoped_socket(%{"info" => [], "event" => []})
+      assert {:error, {:no_handler, "ack"}} =
+               RuntimeRenderer.handle_site_event(:my_site, "ack", %{}, socket)
+    end
+
+    test "nil pubsub (legacy) falls back to site-wide dispatch and runs the handler" do
+      socket = event_scoped_socket(nil)
+      assert {:noreply, updated} = RuntimeRenderer.handle_site_event(:my_site, "ack", %{}, socket)
+      assert updated.assigns.acked == true
+    end
+  end
+
   describe "full lifecycle" do
     test "mount → handle_params → render → handle_event" do
       RuntimeRenderer.publish_page(@site, "full_1", %{

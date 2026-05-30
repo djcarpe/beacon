@@ -1246,21 +1246,28 @@ defmodule Beacon.RuntimeRenderer do
   Dispatches a site-level event handler. Falls back to page-level if not found at site level.
   """
   def handle_site_event(site, event_name, event_params, socket) do
-    case :ets.lookup(@table, {site, :site_handler, :event, event_name}) do
-      [{_, tagged_handler}] ->
-        dispatch_tagged_handler(tagged_handler, event_params, socket)
+    # nil = legacy/un-republished page → site-wide; list = component-scoped names
+    allowed = get_in(socket.assigns, [:beacon, :private, :pubsub, "event"])
 
-      [] ->
-        # Lazy load event handlers for this site
-        ensure_site_handlers_loaded(site, :event)
+    if allowed != nil and event_name not in allowed do
+      {:error, {:no_handler, event_name}}
+    else
+      case :ets.lookup(@table, {site, :site_handler, :event, event_name}) do
+        [{_, tagged_handler}] ->
+          dispatch_tagged_handler(tagged_handler, event_params, socket)
 
-        case :ets.lookup(@table, {site, :site_handler, :event, event_name}) do
-          [{_, tagged_handler}] ->
-            dispatch_tagged_handler(tagged_handler, event_params, socket)
+        [] ->
+          # Lazy load event handlers for this site
+          ensure_site_handlers_loaded(site, :event)
 
-          [] ->
-            {:error, {:no_handler, event_name}}
-        end
+          case :ets.lookup(@table, {site, :site_handler, :event, event_name}) do
+            [{_, tagged_handler}] ->
+              dispatch_tagged_handler(tagged_handler, event_params, socket)
+
+            [] ->
+              {:error, {:no_handler, event_name}}
+          end
+      end
     end
   end
 
