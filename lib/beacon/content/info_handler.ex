@@ -23,6 +23,7 @@ defmodule Beacon.Content.InfoHandler do
           site: Beacon.Types.Site.t(),
           msg: binary(),
           code: binary(),
+          topic: binary() | nil,
           inserted_at: DateTime.t(),
           updated_at: DateTime.t()
         }
@@ -31,16 +32,17 @@ defmodule Beacon.Content.InfoHandler do
     field :site, Beacon.Types.Site
     field :msg, :string
     field :code, :string
+    # Optional PubSub topic this handler expects messages from. Added by the
+    # v014 migration; Sojourner's PubSubOnMount reads it to auto-subscribe.
+    field :topic, :string
 
     timestamps()
   end
 
   @doc false
   def changeset(%__MODULE__{} = info_handler, attrs) do
-    fields = ~w(site msg code)a
-
     info_handler
-    |> cast(attrs, fields)
-    |> validate_required(fields)
+    |> cast(attrs, ~w(site msg code topic)a)
+    |> validate_required(~w(site msg code)a)
   end
 end
