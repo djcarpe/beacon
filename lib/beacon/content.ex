@@ -3441,6 +3441,7 @@ defmodule Beacon.Content do
     per_page = Keyword.get(opts, :per_page, 20)
     page = Keyword.get(opts, :page, 1)
     search = Keyword.get(opts, :query)
+    category = Keyword.get(opts, :category)
     preloads = Keyword.get(opts, :preloads, [])
     sort = Keyword.get(opts, :sort, :name)
 
@@ -3450,6 +3451,7 @@ defmodule Beacon.Content do
     |> query_list_components_limit(per_page)
     |> query_list_components_offset(per_page, page)
     |> query_list_components_search(search)
+    |> query_list_components_category(category)
     |> query_list_components_preloads(preloads)
     |> query_list_components_sort(sort)
     |> repo(site).all()
@@ -3471,6 +3473,12 @@ defmodule Beacon.Content do
   defp query_list_components_search(query, search) when is_binary(search), do: from(q in query, where: ilike(q.name, ^"%#{search}%"))
   defp query_list_components_search(query, _search), do: query
 
+  defp query_list_components_category(query, category) when is_binary(category) and category != "" do
+    from(q in query, where: q.category == ^category)
+  end
+
+  defp query_list_components_category(query, _category), do: query
+
   defp query_list_components_preloads(query, [_preload | _] = preloads), do: from(q in query, preload: ^preloads)
   defp query_list_components_preloads(query, _preloads), do: query
 
@@ -3487,10 +3495,12 @@ defmodule Beacon.Content do
   @spec count_components(Site.t(), keyword()) :: non_neg_integer()
   def count_components(site, opts \\ []) do
     search = Keyword.get(opts, :query)
+    category = Keyword.get(opts, :category)
 
     site
     |> query_list_components_base()
     |> query_list_components_search(search)
+    |> query_list_components_category(category)
     |> select([q], count(q.id))
     |> repo(site).one()
   end
