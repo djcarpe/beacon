@@ -1282,6 +1282,9 @@ defmodule Beacon.RuntimeRenderer do
   end
 
   def handle_site_info(site, msg, socket) do
+    # nil = legacy/un-republished page → site-wide; list = component-scoped names
+    allowed = get_in(socket.assigns, [:beacon, :private, :pubsub, "info"])
+
     # Try all info handlers for the site
     case :ets.match(@table, {{site, :site_handler, :info, :"$1"}, :"$2"}) do
       [] ->
@@ -1290,42 +1293,52 @@ defmodule Beacon.RuntimeRenderer do
 
         case :ets.match(@table, {{site, :site_handler, :info, :"$1"}, :"$2"}) do
           [] -> {:error, {:no_handler, msg}}
-          handlers -> dispatch_info_handlers(handlers, msg, socket)
+          handlers -> dispatch_info_handlers(handlers, msg, socket, site, allowed)
         end
 
       handlers ->
-        dispatch_info_handlers(handlers, msg, socket)
+        dispatch_info_handlers(handlers, msg, socket, site, allowed)
     end
   end
 
-  defp dispatch_info_handlers(handlers, msg, socket) do
-    Enum.find_value(handlers, {:error, {:no_handler, msg}}, fn [name, tagged_handler] ->
-      # Parse the handler's msg pattern and try to match it against the incoming message
-      case match_info_pattern(name, msg) do
-        {:ok, pattern_bindings} ->
-          try do
-            case tagged_handler do
-              {:elixir, serialized_ast} ->
-                ast = :erlang.binary_to_term(serialized_ast)
-                bindings = Map.merge(pattern_bindings, %{socket: socket, msg: msg})
-                eval_ast(ast, bindings)
+  defp dispatch_info_handlers(handlers, msg, socket, site, allowed) do
+    name_index = info_name_index(site)
 
-              {:actions, action_document} ->
-                event_params = Map.merge(pattern_bindings, %{"msg" => msg})
-                Beacon.Actions.Interpreter.execute(action_document, event_params, socket)
+    Enum.find_value(handlers, {:error, {:no_handler, msg}}, fn [msg_pattern, tagged_handler] ->
+      handler_name = Map.get(name_index, msg_pattern)
 
-              serialized_ast when is_binary(serialized_ast) ->
-                # Legacy untagged format
-                ast = :erlang.binary_to_term(serialized_ast)
-                bindings = Map.merge(pattern_bindings, %{socket: socket, msg: msg})
-                eval_ast(ast, bindings)
+      # nil allowed → site-wide (legacy). Otherwise only run handlers the page's
+      # components declared.
+      if allowed == nil or handler_name in allowed do
+        # Parse the handler's msg pattern and try to match it against the incoming message
+        case match_info_pattern(msg_pattern, msg) do
+          {:ok, pattern_bindings} ->
+            try do
+              case tagged_handler do
+                {:elixir, serialized_ast} ->
+                  ast = :erlang.binary_to_term(serialized_ast)
+                  bindings = Map.merge(pattern_bindings, %{socket: socket, msg: msg})
+                  eval_ast(ast, bindings)
+
+                {:actions, action_document} ->
+                  event_params = Map.merge(pattern_bindings, %{"msg" => msg})
+                  Beacon.Actions.Interpreter.execute(action_document, event_params, socket)
+
+                serialized_ast when is_binary(serialized_ast) ->
+                  # Legacy untagged format
+                  ast = :erlang.binary_to_term(serialized_ast)
+                  bindings = Map.merge(pattern_bindings, %{socket: socket, msg: msg})
+                  eval_ast(ast, bindings)
+              end
+            rescue
+              _ -> nil
             end
-          rescue
-            _ -> nil
-          end
 
-        :no_match ->
-          nil
+          :no_match ->
+            nil
+        end
+      else
+        nil
       end
     end)
   end
@@ -1357,8 +1370,23 @@ defmodule Beacon.RuntimeRenderer do
         store_site_handler(site, type, name, handler.code)
       end
 
+      if type == :info do
+        # Info handlers are keyed in ETS by their msg pattern (above), but
+        # component-bound scoping filters by handler NAME. Keep a msg→name
+        # index so dispatch can map a matched handler back to its name.
+        index = Map.new(handlers, fn h -> {h.msg, h.name} end)
+        :ets.insert(@table, {{site, :site_handler_name_index, :info}, index})
+      end
+
       :loaded
     end, ttl)
+  end
+
+  defp info_name_index(site) do
+    case :ets.lookup(@table, {site, :site_handler_name_index, :info}) do
+      [{_, index}] -> index
+      [] -> %{}
+    end
   end
 
   def unpublish_page(site, page_id) do

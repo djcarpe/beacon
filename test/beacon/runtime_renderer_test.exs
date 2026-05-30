@@ -396,6 +396,78 @@ defmodule Beacon.RuntimeRendererTest do
   end
 
 
+  describe "scoped info-handler dispatch" do
+    # Two site-wide info handlers seeded for :my_site:
+    #   h_a — msg "{:a, v}" — sets socket.assigns.got = {:a, v}
+    #   h_b — msg "{:b, v}" — sets socket.assigns.got = {:b, v}
+    #
+    # When the page's pubsub set only allows ["h_a"]:
+    #   * handle_site_info(site, {:a, 1}, ...) => {:noreply, socket with :got == {:a,1}}
+    #   * handle_site_info(site, {:b, 2}, ...) => {:error, {:no_handler, _}}  (h_b not allowed)
+    #
+    # When pubsub is nil (legacy/un-republished page):
+    #   * site-wide fallback runs both handlers
+
+    setup do
+      # Clear the info-handler cache so ensure_site_handlers_loaded re-queries DB for each test
+      :ets.delete(:beacon_runtime_poc, {:my_site, :handlers_load, :info})
+      :ets.delete(:beacon_runtime_poc, {:my_site, :site_handler_name_index, :info})
+      :ets.match_delete(:beacon_runtime_poc, {{:my_site, :site_handler, :info, :_}, :_})
+
+      Beacon.Content.create_info_handler!(%{
+        site: :my_site,
+        name: "h_a",
+        msg: "{:a, v}",
+        code: "{:noreply, Phoenix.Component.assign(socket, :got, {:a, v})}"
+      })
+
+      Beacon.Content.create_info_handler!(%{
+        site: :my_site,
+        name: "h_b",
+        msg: "{:b, v}",
+        code: "{:noreply, Phoenix.Component.assign(socket, :got, {:b, v})}"
+      })
+
+      :ok
+    end
+
+    defp scoped_socket(pubsub) do
+      %Phoenix.LiveView.Socket{
+        assigns: %{
+          __changed__: %{},
+          beacon: %{
+            site: :my_site,
+            private: %{pubsub: pubsub}
+          }
+        }
+      }
+    end
+
+    test "allowed handler runs when page declares it" do
+      socket = scoped_socket(%{"info" => ["h_a"], "event" => []})
+      assert {:noreply, updated} = RuntimeRenderer.handle_site_info(:my_site, {:a, 1}, socket)
+      assert updated.assigns.got == {:a, 1}
+    end
+
+    test "non-allowed handler is blocked even if it would match the message" do
+      socket = scoped_socket(%{"info" => ["h_a"], "event" => []})
+      assert {:error, {:no_handler, {:b, 2}}} =
+               RuntimeRenderer.handle_site_info(:my_site, {:b, 2}, socket)
+    end
+
+    test "nil pubsub (legacy) falls back to site-wide dispatch and runs h_b" do
+      socket = scoped_socket(nil)
+      assert {:noreply, updated} = RuntimeRenderer.handle_site_info(:my_site, {:b, 2}, socket)
+      assert updated.assigns.got == {:b, 2}
+    end
+
+    test "nil pubsub (legacy) also runs h_a site-wide" do
+      socket = scoped_socket(nil)
+      assert {:noreply, updated} = RuntimeRenderer.handle_site_info(:my_site, {:a, 1}, socket)
+      assert updated.assigns.got == {:a, 1}
+    end
+  end
+
   describe "full lifecycle" do
     test "mount → handle_params → render → handle_event" do
       RuntimeRenderer.publish_page(@site, "full_1", %{
