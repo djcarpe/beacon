@@ -32,6 +32,10 @@ defmodule Beacon.Content.Component do
     field :category, Ecto.Enum, values: @categories, default: :element
     field :thumbnail, :string
     field :ast, :map
+    # Info/event handler names this component depends on, shaped
+    # %{"info" => [...], "event" => [...]}. A page's effective pubsub set is
+    # the union over its embedded components (see Beacon.Content.PubSubResolver).
+    field :handlers, :map, default: %{}
 
     has_many :attrs, ComponentAttr, on_replace: :delete
     has_many :slots, ComponentSlot, on_replace: :delete
@@ -44,7 +48,7 @@ defmodule Beacon.Content.Component do
     reserved_names = for {name, _arity} <- Phoenix.Component.__info__(:functions) ++ Phoenix.Component.__info__(:macros), do: Atom.to_string(name)
 
     component
-    |> cast(attrs, [:site, :name, :description, :body, :template, :example, :category, :thumbnail])
+    |> cast(attrs, [:site, :name, :description, :body, :template, :example, :category, :thumbnail, :handlers])
     |> validate_required([:site, :name, :template, :example, :category])
     |> validate_format(:name, ~r/^[a-z0-9_!]+$/, message: "can only contain lowercase letters, numbers, and underscores")
     |> validate_exclusion(:name, reserved_names)
