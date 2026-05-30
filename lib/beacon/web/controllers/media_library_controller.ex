@@ -16,8 +16,11 @@ defmodule Beacon.Web.MediaLibraryController do
           |> send_resp(200, file_body)
         end)
 
-      %Asset{} ->
-        raise Beacon.Web.NotFoundError, "asset #{inspect(file_name)} has no file_body, use an external provider"
+      %Asset{} = asset ->
+        # External provider (S3): no DB bytes — redirect to the provider URL.
+        # url_for/1 resolves the asset's first provider; for S3.Signed this is a
+        # fresh presigned URL generated per request (no expiry baked into pages).
+        redirect(conn, external: Beacon.MediaLibrary.url_for(asset))
 
       _ ->
         raise Beacon.Web.NotFoundError, "asset #{inspect(file_name)} not found"
