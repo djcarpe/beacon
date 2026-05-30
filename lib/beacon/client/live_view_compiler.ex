@@ -14,12 +14,19 @@ defmodule Beacon.Client.LiveViewCompiler do
   """
   @spec render([map()], map()) :: Phoenix.LiveView.Rendered.t()
   def render(ast, assigns) when is_list(ast) do
-    iodata = render_nodes(ast, assigns)
+    html = IO.iodata_to_binary(render_nodes(ast, assigns))
 
     %Phoenix.LiveView.Rendered{
-      static: [IO.iodata_to_binary(iodata)],
+      static: [html],
       dynamic: fn _ -> [] end,
-      fingerprint: :erlang.phash2(ast),
+      # Content-based fingerprint: the whole page renders into a single static
+      # string with no dynamic slots, so LiveView keys re-renders on this value.
+      # Hashing the AST (which never changes) made every re-render look identical,
+      # so assign-driven updates (e.g. an on_mount ticker reassigning a chart
+      # spec) were never sent to the client. Hashing the rendered HTML instead
+      # re-sends the static whenever the output actually changes, and stays
+      # stable (no resend) when it doesn't.
+      fingerprint: :erlang.phash2(html),
       root: true,
       caller: :not_available
     }

@@ -168,9 +168,44 @@ defmodule Beacon.Template.ComponentExpander do
       {name, %{type: :expression, path: path} = expr} ->
         {name, rewrite_path(expr, path, prop_map)}
 
+      {name, value} when is_binary(value) ->
+        {name, rewrite_attr_string(value, prop_map)}
+
       {name, value} ->
         {name, value}
     end)
+  end
+
+  # The parser keeps attribute values as raw strings (e.g. `"chart-{{ id }}"`,
+  # `"{{ spec }}"`), so component props referenced inside an attribute are not
+  # `%{type: :expression}` nodes and would otherwise never be rewritten — they
+  # would resolve against the page's runtime assigns (which don't carry
+  # per-instance props) and render blank. Rewrite each `{{ ... }}` binding here,
+  # at expansion time, using the prop map: static props collapse to their text
+  # value, dynamic (`:prop`) bindings are rewritten to their source path. Tokens
+  # that aren't props are left untouched (could be loop vars or page assigns).
+  @attr_binding_regex ~r/\{\{(.+?)\}\}/s
+
+  defp rewrite_attr_string(value, prop_map) do
+    if String.contains?(value, "{{") do
+      Regex.replace(@attr_binding_regex, value, fn full, expr ->
+        {root, rest} = split_path(String.trim(expr))
+
+        case Map.get(prop_map, root) do
+          %{type: :expression, path: source_path} ->
+            new_path = if rest == "", do: source_path, else: "#{source_path}.#{rest}"
+            "{{ #{new_path} }}"
+
+          %{type: :text, value: text} ->
+            to_string(text)
+
+          nil ->
+            full
+        end
+      end)
+    else
+      value
+    end
   end
 
   defp rewrite_test(%{left: left, op: op, right: right}, prop_map) do
