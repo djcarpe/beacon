@@ -779,6 +779,19 @@ defmodule Beacon.Content do
     # Generate the platform-agnostic AST from the template
     ast = build_page_ast(page)
 
+    # Resolve pubsub handler set from the pre-expansion page AST so component
+    # tag references are still visible (build_page_ast expands them inline).
+    pre_expansion_nodes =
+      try do
+        template = Beacon.Lifecycle.Template.load_template(page)
+        Beacon.Template.Parser.parse(template)
+      rescue
+        _ -> []
+      end
+
+    pubsub = Beacon.Content.PubSubResolver.resolve(pre_expansion_nodes, build_pubsub_registry(page.site))
+    page = %{page | extra: Map.put(page.extra || %{}, "pubsub", pubsub)}
+
     attrs = %{
       "site" => page.site,
       "schema_version" => Page.version(),
@@ -855,6 +868,22 @@ defmodule Beacon.Content do
         end
 
       {component.name, ast}
+    end)
+  end
+
+  @doc false
+  def build_pubsub_registry(site) do
+    site
+    |> list_components(per_page: :infinity)
+    |> Map.new(fn component ->
+      ast =
+        try do
+          Beacon.Template.Parser.parse(component.template || "")
+        rescue
+          _ -> []
+        end
+
+      {component.name, %{ast: ast, handlers: component.handlers || %{}}}
     end)
   end
 
