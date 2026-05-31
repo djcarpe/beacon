@@ -24,10 +24,20 @@ defmodule Beacon.Boot do
     Beacon.RuntimeRenderer.init()
 
     seed_default_site_settings(site)
+    warm_redirect_cache(site)
 
     :persistent_term.put({Beacon, site, :boot_ready}, true)
     Logger.info("Beacon.Boot site #{site} ready (lazy loading)")
     :ignore
+  end
+
+  # Load the site's redirects into the (app-owned, persistent) ETS cache at boot
+  # so redirects fire on the very first request, before any page render.
+  defp warm_redirect_cache(site) do
+    Beacon.Content.RedirectCache.load_redirects(site)
+  rescue
+    error ->
+      Logger.warning("Beacon.Boot failed to warm redirect cache for #{site}: #{Exception.message(error)}")
   end
 
   defp seed_default_site_settings(site) do
