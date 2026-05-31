@@ -88,9 +88,7 @@ defmodule Beacon.SEO.Metrics do
       "pages_with_collection" => count(pages, fn p -> p.collection_id != nil end),
       "pages_with_twitter_card" => count(pages, fn p -> non_empty?(p.twitter_card) end),
       "avg_seo_score" => avg_score,
-      "stale_pages_count" => count(pages, fn p ->
-        p.date_modified == nil or DateTime.compare(p.date_modified, cutoff_90) == :lt
-      end),
+      "stale_pages_count" => count(pages, fn p -> stale?(p.date_modified, cutoff_90) end),
       "orphan_pages_count" => orphan_count,
       "broken_links_count" => broken_count,
       "redirect_count" => redirect_count
@@ -98,6 +96,14 @@ defmodule Beacon.SEO.Metrics do
   end
 
   defp count(pages, fun), do: Enum.count(pages, fun)
+
+  # `date_modified` comes back from the schemaless query as a NaiveDateTime when
+  # the column is `timestamp without time zone`, while cutoff_90 is a DateTime.
+  # DateTime.compare/2 raises function_clause on mixed types, so compare by type.
+  defp stale?(nil, _cutoff), do: true
+  defp stale?(%DateTime{} = dt, cutoff), do: DateTime.compare(dt, cutoff) == :lt
+  defp stale?(%NaiveDateTime{} = ndt, cutoff),
+    do: NaiveDateTime.compare(ndt, DateTime.to_naive(cutoff)) == :lt
 
   defp non_empty?(nil), do: false
   defp non_empty?(""), do: false
