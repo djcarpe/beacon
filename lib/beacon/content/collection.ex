@@ -67,7 +67,7 @@ defmodule Beacon.Content.Collection do
     field :description, :string
     field :mode, :string, default: "managed"
     field :layout_id, :binary_id
-    field :fields, {:array, :map}, default: []
+    field :field_definitions, {:array, :map}, source: :fields, default: []
     field :json_ld_mapping, :map, default: %{}
     field :meta_tag_mapping, {:array, :map}, default: []
     field :starter_template, :string
@@ -86,7 +86,7 @@ defmodule Beacon.Content.Collection do
     collection
     |> cast(attrs, [
       :site, :name, :slug, :description, :mode, :layout_id,
-      :fields, :json_ld_mapping, :meta_tag_mapping,
+      :field_definitions, :json_ld_mapping, :meta_tag_mapping,
       :starter_template, :path_prefix, :path_pattern,
       :icon, :sort_order
     ])
@@ -100,20 +100,20 @@ defmodule Beacon.Content.Collection do
   def valid_modes, do: @valid_modes
 
   defp validate_field_definitions(changeset) do
-    validate_change(changeset, :fields, fn :fields, definitions ->
+    validate_change(changeset, :field_definitions, fn :field_definitions, definitions ->
       errors =
         definitions
         |> Enum.with_index()
         |> Enum.flat_map(fn {def_map, idx} ->
           cond do
             not is_map(def_map) ->
-              [{:fields, "item #{idx} must be a map"}]
+              [{:field_definitions, "item #{idx} must be a map"}]
 
             not is_binary(def_map["name"]) or def_map["name"] == "" ->
-              [{:fields, "item #{idx} missing 'name'"}]
+              [{:field_definitions, "item #{idx} missing 'name'"}]
 
             not is_binary(def_map["type"]) or def_map["type"] not in @supported_field_types ->
-              [{:fields, "item #{idx} has invalid type '#{def_map["type"]}'. Supported: #{Enum.join(@supported_field_types, ", ")}"}]
+              [{:field_definitions, "item #{idx} has invalid type '#{def_map["type"]}'. Supported: #{Enum.join(@supported_field_types, ", ")}"}]
 
             true ->
               []
@@ -124,7 +124,7 @@ defmodule Beacon.Content.Collection do
       dupes = names -- Enum.uniq(names)
 
       if dupes != [] do
-        [{:fields, "duplicate field names: #{Enum.join(Enum.uniq(dupes), ", ")}"} | errors]
+        [{:field_definitions, "duplicate field names: #{Enum.join(Enum.uniq(dupes), ", ")}"} | errors]
       else
         errors
       end

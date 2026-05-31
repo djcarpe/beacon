@@ -148,7 +148,7 @@ defmodule Beacon.RuntimeRenderer.Loader do
         name: col.name,
         slug: col.slug,
         mode: col.mode,
-        fields: col.fields,
+        fields: col.field_definitions,
         json_ld_mapping: col.json_ld_mapping,
         meta_tag_mapping: col.meta_tag_mapping
       }
