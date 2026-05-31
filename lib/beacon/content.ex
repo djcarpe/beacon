@@ -4937,6 +4937,21 @@ defmodule Beacon.Content do
     %Collection{} |> Collection.changeset(attrs) |> repo(site).insert()
   end
 
+  @doc """
+  Creates a collection for the given `site`.
+
+  Site-scoped arity expected by `beacon_live_admin`'s client
+  (`call(site, Beacon.Content, :create_collection, [site, attrs])`). Newer
+  upstream beacon scopes collection creation by site; this fork is behind, so
+  fold the site into `attrs` (the admin form already carries `"site"`) and
+  delegate to `create_collection/1`.
+  """
+  @doc type: :collections
+  @spec create_collection(Site.t(), map()) :: {:ok, Collection.t()} | {:error, Ecto.Changeset.t()}
+  def create_collection(site, attrs) when is_atom(site) and is_map(attrs) do
+    attrs |> Map.put_new("site", site) |> create_collection()
+  end
+
   @doc "Updates a collection."
   @doc type: :collections
   @spec update_collection(Collection.t(), map()) :: {:ok, Collection.t()} | {:error, Ecto.Changeset.t()}
