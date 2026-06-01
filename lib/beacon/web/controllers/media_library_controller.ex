@@ -17,10 +17,30 @@ defmodule Beacon.Web.MediaLibraryController do
         end)
 
       %Asset{} = asset ->
-        # External provider (S3): no DB bytes — redirect to the provider URL.
-        # url_for/1 resolves the asset's first provider; for S3.Signed this is a
-        # fresh presigned URL generated per request (no expiry baked into pages).
-        redirect(conn, external: Beacon.MediaLibrary.url_for(asset))
+        # External provider (S3): no DB bytes. Proxy the object through
+        # Phoenix instead of redirecting the browser to a presigned URL.
+        #
+        # Redirecting only works when the S3 endpoint host is reachable
+        # from the browser — but in the Kubernetes localhost env the
+        # endpoint is the in-cluster service name `http://minio:9000`,
+        # which a browser running on the user's laptop cannot resolve.
+        # Proxying keeps the URL anchored to the Phoenix host
+        # (`http://sojourner.localhost/__beacon_media__/...`) and works
+        # everywhere — localhost, ephemeral envs, prod with S3 — with
+        # no extra ingress / LoadBalancer plumbing per environment.
+        case Beacon.MediaLibrary.Provider.S3.read(asset) do
+          {:ok, body} ->
+            Beacon.Web.Cache.when_stale(conn, asset, fn conn ->
+              conn
+              |> put_resp_header("content-type", "#{asset.media_type}; charset=utf-8")
+              |> Beacon.Web.Cache.asset_cache(:public)
+              |> send_resp(200, body)
+            end)
+
+          {:error, reason} ->
+            raise Beacon.Web.NotFoundError,
+                  "S3 asset #{inspect(file_name)} fetch failed: #{inspect(reason)}"
+        end
 
       _ ->
         raise Beacon.Web.NotFoundError, "asset #{inspect(file_name)} not found"

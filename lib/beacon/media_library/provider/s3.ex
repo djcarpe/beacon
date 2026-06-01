@@ -35,6 +35,41 @@ defmodule Beacon.MediaLibrary.Provider.S3 do
     %{metadata | resource: change}
   end
 
+  @doc """
+  Reads the raw bytes for `asset` from S3.
+
+  Used by `Beacon.Web.MediaLibraryController` to proxy S3-backed assets
+  through Phoenix instead of redirecting the browser to a presigned
+  URL. The redirect path requires the configured S3 endpoint host to
+  be reachable from the browser, which is not the case when the
+  endpoint is an in-cluster-only DNS name (e.g. `http://minio:9000`
+  inside Kubernetes). Proxying keeps the asset URL anchored to the
+  application's own host.
+
+  Returns `{:ok, body}` on a successful 200 fetch, `{:error, reason}`
+  on any failure (no key on the asset, non-200 status, transport
+  error). Never raises — the controller decides how to surface
+  failures (404 to the operator).
+  """
+  @spec read(Asset.t(), keyword()) :: {:ok, binary()} | {:error, term()}
+  def read(asset, config \\ [])
+
+  def read(%Asset{keys: keys}, config) when is_map(keys) do
+    case Map.fetch(keys, provider_key()) do
+      {:ok, key} when is_binary(key) and key != "" ->
+        case ExAws.S3.get_object(bucket(), key) |> ExAws.request(config) do
+          {:ok, %{body: body, status_code: 200}} -> {:ok, body}
+          {:ok, %{status_code: code}} -> {:error, {:http_status, code}}
+          {:error, reason} -> {:error, reason}
+        end
+
+      _ ->
+        {:error, :no_key}
+    end
+  end
+
+  def read(_, _), do: {:error, :no_asset}
+
   @doc false
   def key_for(metadata) do
     UploadMetadata.key_for(metadata)

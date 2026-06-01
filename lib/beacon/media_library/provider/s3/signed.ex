@@ -7,6 +7,7 @@ defmodule Beacon.MediaLibrary.Provider.S3.Signed do
   defdelegate bucket(), to: S3
   defdelegate list(), to: S3
   defdelegate provider_key(), to: S3
+  defdelegate read(asset, config \\ []), to: S3
 
   def url_for(asset, config \\ []) do
     key = Map.fetch!(asset.keys, provider_key())
