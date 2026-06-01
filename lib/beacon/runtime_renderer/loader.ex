@@ -110,6 +110,27 @@ defmodule Beacon.RuntimeRenderer.Loader do
     # Use pre-computed AST from snapshot/page if available
     pre_computed_ast = Map.get(page, :ast)
 
+    # Forward any PageVariant rows the snapshot deserializer preloaded
+    # so RuntimeRenderer.publish_page/3 can compile + store the variant
+    # ASTs alongside the primary. Each variant is normalised to a plain
+    # map (the publish layer can't depend on the Content schema struct
+    # — snapshots arrive as deserialized binaries and may not carry the
+    # full struct shape).
+    variants =
+      case Map.get(page, :variants) do
+        list when is_list(list) ->
+          for v <- list, is_map(v) do
+            %{
+              name: Map.get(v, :name),
+              weight: Map.get(v, :weight) || 0,
+              template: Map.get(v, :template)
+            }
+          end
+
+        _ ->
+          []
+      end
+
     RuntimeRenderer.publish_page(site, page_id, %{
       template: template,
       path: page.path,
@@ -136,7 +157,8 @@ defmodule Beacon.RuntimeRenderer.Loader do
       assigns: %{},
       event_handlers: [],
       helpers: helpers,
-      ast: pre_computed_ast
+      ast: pre_computed_ast,
+      variants: variants
     })
   end
 

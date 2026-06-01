@@ -54,8 +54,14 @@ defmodule Beacon.RuntimeRenderer do
           Beacon.Template.ComponentExpander.expand(page_ast, component_registry)
       end
 
-    # Store the AST in ETS
+    # Store the primary AST in ETS
     :ets.insert(@table, {{site, page_id, :ast}, expanded_ast})
+
+    # Store the variant AST list (resurrects upstream's vestigial
+    # Beacon.Template.choose_template/2 path that the IR rewrite dropped
+    # on the floor). `render_page/3` reads this back at request time and
+    # picks one slot based on the operator's roll-in-session.
+    store_page_variants(site, page_id, attrs)
 
     # 4. Store manifest and route
     store_page_metadata(site, page_id, attrs)
@@ -76,6 +82,75 @@ defmodule Beacon.RuntimeRenderer do
 
     :ok
   end
+
+  # Compiles every `%Beacon.Content.PageVariant{}`-shaped entry in
+  # `attrs.variants` to the same IR shape the primary AST uses, then
+  # writes the list under `{site, page_id, :variants}` for
+  # `render_page/3` to pick from.
+  #
+  # Stores `[{weight, ast}, ...]` in declaration order — exactly the
+  # shape `Beacon.Template.choose_template/2` expects as its tail
+  # argument (`choose_template([primary | variants], roll)`).
+  #
+  # Variants with a blank/nil template are silently dropped (the
+  # admin can produce them in-progress and we don't want a single
+  # half-written variant to crash the whole publish path). A variant
+  # whose AST compile raises gets logged and skipped for the same
+  # reason — every other variant still publishes successfully.
+  defp store_page_variants(site, page_id, attrs) do
+    raw_variants = Map.get(attrs, :variants, []) || []
+
+    compiled =
+      raw_variants
+      |> Enum.flat_map(&compile_variant(site, &1))
+
+    case compiled do
+      [] ->
+        :ets.delete(@table, {site, page_id, :variants})
+
+      list ->
+        :ets.insert(@table, {{site, page_id, :variants}, list})
+    end
+
+    :ok
+  end
+
+  defp compile_variant(site, %{template: template, weight: weight} = variant)
+       when is_binary(template) and template != "" and is_integer(weight) do
+    pre_computed_ast = Map.get(variant, :ast)
+
+    ast =
+      case pre_computed_ast do
+        ast when is_list(ast) and ast != [] ->
+          ast
+
+        _ ->
+          try do
+            variant_ast = Beacon.Template.Parser.parse(template)
+            component_registry = build_component_registry(site)
+            Beacon.Template.ComponentExpander.expand(variant_ast, component_registry)
+          rescue
+            error ->
+              require Logger
+
+              Logger.warning(
+                "[Beacon.RuntimeRenderer] Skipped variant " <>
+                  inspect(Map.get(variant, :name)) <>
+                  " on site #{site}: #{Exception.message(error)}"
+              )
+
+              :error
+          end
+      end
+
+    case ast do
+      :error -> []
+      ast when is_list(ast) -> [{weight, ast}]
+      _ -> []
+    end
+  end
+
+  defp compile_variant(_site, _other), do: []
 
   defp store_page_metadata(site, page_id, attrs) do
     path = Map.get(attrs, :path, "/")
@@ -1141,14 +1216,37 @@ defmodule Beacon.RuntimeRenderer do
 
   def render_page(site, page_id, assigns \\ %{}) when is_atom(site) do
     case :ets.lookup(@table, {site, page_id, :ast}) do
-      [{_, ast}] when is_list(ast) ->
+      [{_, primary_ast}] when is_list(primary_ast) ->
         stored_assigns = fetch_assigns(site, page_id)
         full_assigns = Map.merge(stored_assigns, assigns) |> Map.delete(:__changed__)
-        rendered = Beacon.Client.LiveViewCompiler.render(ast, full_assigns)
+        chosen_ast = choose_page_ast(site, page_id, primary_ast, full_assigns)
+        rendered = Beacon.Client.LiveViewCompiler.render(chosen_ast, full_assigns)
         {:ok, rendered}
 
       _ ->
         {:error, :not_found}
+    end
+  end
+
+  # Picks which AST to render for this request: the primary, or one of
+  # the variants stored under `{site, page_id, :variants}`.
+  #
+  # The selection key — `assigns.beacon.private.variant_roll` — is
+  # populated by `Beacon.Plug` on the request's first hit and lives in
+  # the signed session cookie, so a single user's roll is stable across
+  # cluster nodes (the cookie travels with the client; nothing
+  # node-local). The variants list lives in each node's local ETS;
+  # cross-node consistency is provided by `Beacon.PubSub.page_published`
+  # broadcasting to every node, which re-runs `Loader.reload_page/2`
+  # locally — same pattern used for the primary template.
+  defp choose_page_ast(site, page_id, primary_ast, assigns) do
+    case :ets.lookup(@table, {site, page_id, :variants}) do
+      [{_, variants}] when is_list(variants) and variants != [] ->
+        roll = get_in(assigns, [:beacon, :private, :variant_roll])
+        Beacon.Template.choose_template([primary_ast | variants], roll)
+
+      _ ->
+        primary_ast
     end
   end
 
@@ -1405,6 +1503,7 @@ defmodule Beacon.RuntimeRenderer do
 
     :ets.delete(@table, {site, page_id, :ir})
     :ets.delete(@table, {site, page_id, :ast})
+    :ets.delete(@table, {site, page_id, :variants})
     :ets.delete(@table, {site, page_id, :manifest})
     :ets.delete(@table, {site, page_id, :assigns})
     :ets.delete(@table, {site, page_id, :page_queries})
