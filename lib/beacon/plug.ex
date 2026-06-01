@@ -20,7 +20,12 @@ defmodule Beacon.Plug do
   @private_routes [
     "__beacon_check__",
     "__beacon_assets__",
-    "__beacon_media__"
+    "__beacon_media__",
+    # Sibling of `__beacon_media__` (client-direct presigned URLs).
+    # Hits here are asset fetches, not page renders, so we skip the
+    # per-request `beacon_variant_roll` roll — same reasoning as the
+    # other private routes.
+    "__beacon_media_presigned__"
   ]
 
   @impl Plug

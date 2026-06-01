@@ -971,7 +971,7 @@ defmodule Beacon.RuntimeRenderer do
   end
 
   @doc """
-  Returns the media asset path for a file.
+  Returns the media asset path for a file (proxy variant).
   """
   def beacon_media_path(site, file_name) do
     config = Beacon.Config.fetch!(site)
@@ -980,12 +980,40 @@ defmodule Beacon.RuntimeRenderer do
   end
 
   @doc """
-  Returns the full media asset URL for a file.
+  Returns the full media asset URL for a file (proxy variant).
   """
   def beacon_media_url(site, file_name) do
     uri = Beacon.ProxyEndpoint.public_uri(site)
     host = String.Chars.URI.to_string(%URI{scheme: uri.scheme, host: uri.host, port: uri.port})
     host <> beacon_media_path(site, file_name)
+  end
+
+  @doc """
+  Returns the media asset path for the presigned-URL companion route
+  (`/__beacon_media_presigned__/<file_name>`). Hitting this path 302s
+  the browser to a presigned S3 URL — bytes flow client ↔ S3 instead
+  of through the Phoenix pod. See
+  `Beacon.Web.MediaLibraryController.presigned/2`.
+  """
+  def beacon_media_presigned_path(site, file_name) do
+    config = Beacon.Config.fetch!(site)
+    prefix = config.router.__beacon_scoped_prefix_for_site__(site)
+    sanitize_path("#{prefix}/__beacon_media_presigned__/#{file_name}")
+  end
+
+  @doc """
+  Returns the full URL for the presigned-URL companion route.
+
+  Note: this returns the **Phoenix** URL that 302s to the presigned
+  one (`/__beacon_media_presigned__/<file>`), not the S3 URL itself.
+  Embedding this URL in pages keeps the per-fetch signing fresh
+  (signature is regenerated on each request) and decouples templates
+  from the underlying S3 endpoint configuration.
+  """
+  def beacon_media_presigned_url(site, file_name) do
+    uri = Beacon.ProxyEndpoint.public_uri(site)
+    host = String.Chars.URI.to_string(%URI{scheme: uri.scheme, host: uri.host, port: uri.port})
+    host <> beacon_media_presigned_path(site, file_name)
   end
 
   defp sanitize_path(path), do: String.replace(path, "//", "/")

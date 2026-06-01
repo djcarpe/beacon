@@ -179,6 +179,15 @@ defmodule Beacon.Router do
         live_session session_name, session_opts do
           get "/__beacon_media__/:file_name", Beacon.Web.MediaLibraryController, :show, assigns: %{site: site}
 
+          # Client-direct presigned-URL companion to /__beacon_media__.
+          # 302s the browser to a presigned URL pointing at the
+          # configured public S3 endpoint
+          # (`:beacon, :media_library_presigned_url_endpoint`), letting
+          # bytes flow client ↔ S3 without proxying through Phoenix.
+          # Template authors pick which path to embed per asset; both
+          # routes resolve the same `MediaLibrary.get_asset_by/2` row.
+          get "/__beacon_media_presigned__/:file_name", Beacon.Web.MediaLibraryController, :presigned, assigns: %{site: site}
+
           # TODO: css_config-:md5 caching
           get "/__beacon_assets__/css_config", Beacon.Web.AssetsController, :css_config, assigns: %{site: site}
           get "/__beacon_assets__/css-:md5", Beacon.Web.AssetsController, :css, assigns: %{site: site}
@@ -248,6 +257,25 @@ defmodule Beacon.Router do
   @doc false
   def beacon_asset_url(site, file_name) when is_atom(site) and is_binary(file_name) do
     Beacon.RuntimeRenderer.beacon_media_url(site, file_name)
+  end
+
+  @doc """
+  Asset path that 302s to a presigned S3 URL. Use this when you want
+  the browser to fetch the bytes directly from S3 (no Phoenix
+  bandwidth). Falls back to streaming through Phoenix for DB-backed
+  assets — safe to embed unconditionally in templates.
+  """
+  def beacon_asset_presigned_path(site, file_name)
+      when is_atom(site) and is_binary(file_name) do
+    Beacon.RuntimeRenderer.beacon_media_presigned_path(site, file_name)
+  end
+
+  @doc """
+  Full URL companion to `beacon_asset_presigned_path/2`.
+  """
+  def beacon_asset_presigned_url(site, file_name)
+      when is_atom(site) and is_binary(file_name) do
+    Beacon.RuntimeRenderer.beacon_media_presigned_url(site, file_name)
   end
 
   @doc false
