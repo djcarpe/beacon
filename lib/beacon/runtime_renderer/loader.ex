@@ -69,7 +69,11 @@ defmodule Beacon.RuntimeRenderer.Loader do
         rescue
           error ->
             require Logger
-            Logger.warning("[Beacon.RuntimeRenderer] Skipped page #{page.path} (#{page.format}): #{Exception.message(error)}")
+
+            Logger.warning(
+              "[Beacon.RuntimeRenderer] Skipped page #{page.path} (#{page.format}): #{Exception.message(error)}"
+            )
+
             :error
         end
       end)
@@ -78,7 +82,10 @@ defmodule Beacon.RuntimeRenderer.Loader do
     skipped = Enum.count(results, &(&1 == :error))
 
     require Logger
-    Logger.info("[Beacon.RuntimeRenderer] Loaded #{loaded} pages, skipped #{skipped} for site #{site}")
+
+    Logger.info(
+      "[Beacon.RuntimeRenderer] Loaded #{loaded} pages, skipped #{skipped} for site #{site}"
+    )
   end
 
   @doc """
@@ -100,7 +107,9 @@ defmodule Beacon.RuntimeRenderer.Loader do
     # Extract helpers from page (may need preloading)
     helpers =
       case Map.get(page, :helpers) do
-        nil -> []
+        nil ->
+          []
+
         helpers when is_list(helpers) ->
           Enum.map(helpers, fn h ->
             %{name: h.name, args: h.args, code: h.code}
@@ -163,17 +172,21 @@ defmodule Beacon.RuntimeRenderer.Loader do
   end
 
   defp resolve_collection(_site, nil), do: nil
+
   defp resolve_collection(site, collection_id) do
     case Content.get_collection(site, collection_id) do
-      nil -> nil
-      col -> %{
-        name: col.name,
-        slug: col.slug,
-        mode: col.mode,
-        fields: col.field_definitions,
-        json_ld_mapping: col.json_ld_mapping,
-        meta_tag_mapping: col.meta_tag_mapping
-      }
+      nil ->
+        nil
+
+      col ->
+        %{
+          name: col.name,
+          slug: col.slug,
+          mode: col.mode,
+          fields: col.field_definitions,
+          json_ld_mapping: col.json_ld_mapping,
+          meta_tag_mapping: col.meta_tag_mapping
+        }
     end
   end
 
@@ -188,12 +201,22 @@ defmodule Beacon.RuntimeRenderer.Loader do
         try do
           component_attrs = component.attrs || []
           attrs_list = Enum.map(component_attrs, fn a -> %{name: a.name, opts: a.opts || []} end)
-          RuntimeRenderer.publish_component(site, component.name, component.template, component.body || "", attrs: attrs_list)
+
+          RuntimeRenderer.publish_component(
+            site,
+            component.name,
+            component.template,
+            component.body || "", attrs: attrs_list)
+
           :ok
         rescue
           error ->
             require Logger
-            Logger.warning("[Beacon.RuntimeRenderer] Skipped component #{component.name}: #{Exception.message(error)}")
+
+            Logger.warning(
+              "[Beacon.RuntimeRenderer] Skipped component #{component.name}: #{Exception.message(error)}"
+            )
+
             :error
         end
       end)
@@ -202,7 +225,10 @@ defmodule Beacon.RuntimeRenderer.Loader do
     skipped = Enum.count(results, &(&1 == :error))
 
     require Logger
-    Logger.info("[Beacon.RuntimeRenderer] Loaded #{loaded} components, skipped #{skipped} for site #{site}")
+
+    Logger.info(
+      "[Beacon.RuntimeRenderer] Loaded #{loaded} components, skipped #{skipped} for site #{site}"
+    )
   end
 
   @doc """
@@ -244,7 +270,10 @@ defmodule Beacon.RuntimeRenderer.Loader do
     end
 
     require Logger
-    Logger.info("[Beacon.RuntimeRenderer] Loaded #{length(handlers)} event handlers for site #{site}")
+
+    Logger.info(
+      "[Beacon.RuntimeRenderer] Loaded #{length(handlers)} event handlers for site #{site}"
+    )
   end
 
   @doc """
@@ -253,12 +282,17 @@ defmodule Beacon.RuntimeRenderer.Loader do
   def load_info_handlers(site) do
     handlers = Content.list_info_handlers(site)
 
-    for handler <- handlers do
-      RuntimeRenderer.store_site_handler(site, :info, handler.msg, handler.code)
-    end
+    # Full reset: clears stale entries AND rebuilds the msg->name index that
+    # component-scoped dispatch needs. The previous plain store loop skipped the
+    # index, so handlers created/edited at runtime were silently dropped until a
+    # restart (see RuntimeRenderer.reset_info_handlers/2).
+    RuntimeRenderer.reset_info_handlers(site, handlers)
 
     require Logger
-    Logger.info("[Beacon.RuntimeRenderer] Loaded #{length(handlers)} info handlers for site #{site}")
+
+    Logger.info(
+      "[Beacon.RuntimeRenderer] Loaded #{length(handlers)} info handlers for site #{site}"
+    )
   end
 
   @doc """
@@ -302,7 +336,11 @@ defmodule Beacon.RuntimeRenderer.Loader do
         rescue
           error ->
             require Logger
-            Logger.warning("[Beacon.RuntimeRenderer] Skipped error page #{error_page.status}: #{Exception.message(error)}")
+
+            Logger.warning(
+              "[Beacon.RuntimeRenderer] Skipped error page #{error_page.status}: #{Exception.message(error)}"
+            )
+
             :error
         end
       end)
@@ -311,7 +349,10 @@ defmodule Beacon.RuntimeRenderer.Loader do
     skipped = Enum.count(results, &(&1 == :error))
 
     require Logger
-    Logger.info("[Beacon.RuntimeRenderer] Loaded #{loaded} error pages, skipped #{skipped} for site #{site}")
+
+    Logger.info(
+      "[Beacon.RuntimeRenderer] Loaded #{loaded} error pages, skipped #{skipped} for site #{site}"
+    )
   end
 
   @doc """
@@ -325,7 +366,10 @@ defmodule Beacon.RuntimeRenderer.Loader do
     end
 
     require Logger
-    Logger.info("[Beacon.RuntimeRenderer] Loaded #{length(helpers)} snippet helpers for site #{site}")
+
+    Logger.info(
+      "[Beacon.RuntimeRenderer] Loaded #{length(helpers)} snippet helpers for site #{site}"
+    )
   end
 
   @doc """
@@ -360,13 +404,22 @@ defmodule Beacon.RuntimeRenderer.Loader do
     case Content.get_component_by(site, name: component_name) do
       nil ->
         require Logger
-        Logger.warning("[Beacon.RuntimeRenderer] Component #{component_name} not found for site #{site}")
+
+        Logger.warning(
+          "[Beacon.RuntimeRenderer] Component #{component_name} not found for site #{site}"
+        )
+
         :error
 
       component ->
-        component_attrs = (component.attrs || [])
+        component_attrs = component.attrs || []
         attrs_list = Enum.map(component_attrs, fn a -> %{name: a.name, opts: a.opts || []} end)
-        RuntimeRenderer.publish_component(site, component.name, component.template, component.body || "", attrs: attrs_list)
+
+        RuntimeRenderer.publish_component(
+          site,
+          component.name,
+          component.template,
+          component.body || "", attrs: attrs_list)
     end
   end
 
@@ -422,5 +475,4 @@ defmodule Beacon.RuntimeRenderer.Loader do
         page
     end
   end
-
 end
