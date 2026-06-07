@@ -70,9 +70,7 @@ defmodule Beacon.RuntimeRenderer.Loader do
           error ->
             require Logger
 
-            Logger.warning(
-              "[Beacon.RuntimeRenderer] Skipped page #{page.path} (#{page.format}): #{Exception.message(error)}"
-            )
+            Logger.warning("[Beacon.RuntimeRenderer] Skipped page #{page.path} (#{page.format}): #{Exception.message(error)}")
 
             :error
         end
@@ -83,9 +81,7 @@ defmodule Beacon.RuntimeRenderer.Loader do
 
     require Logger
 
-    Logger.info(
-      "[Beacon.RuntimeRenderer] Loaded #{loaded} pages, skipped #{skipped} for site #{site}"
-    )
+    Logger.info("[Beacon.RuntimeRenderer] Loaded #{loaded} pages, skipped #{skipped} for site #{site}")
   end
 
   @doc """
@@ -194,7 +190,7 @@ defmodule Beacon.RuntimeRenderer.Loader do
   Loads all components for a site into the RuntimeRenderer.
   """
   def load_components(site) do
-    components = Content.list_components(site, per_page: :infinity)
+    components = Content.list_components(site, per_page: :infinity, preloads: [:attrs])
 
     results =
       Enum.map(components, fn component ->
@@ -206,16 +202,16 @@ defmodule Beacon.RuntimeRenderer.Loader do
             site,
             component.name,
             component.template,
-            component.body || "", attrs: attrs_list)
+            component.body || "",
+            attrs: attrs_list
+          )
 
           :ok
         rescue
           error ->
             require Logger
 
-            Logger.warning(
-              "[Beacon.RuntimeRenderer] Skipped component #{component.name}: #{Exception.message(error)}"
-            )
+            Logger.warning("[Beacon.RuntimeRenderer] Skipped component #{component.name}: #{Exception.message(error)}")
 
             :error
         end
@@ -226,9 +222,7 @@ defmodule Beacon.RuntimeRenderer.Loader do
 
     require Logger
 
-    Logger.info(
-      "[Beacon.RuntimeRenderer] Loaded #{loaded} components, skipped #{skipped} for site #{site}"
-    )
+    Logger.info("[Beacon.RuntimeRenderer] Loaded #{loaded} components, skipped #{skipped} for site #{site}")
   end
 
   @doc """
@@ -271,9 +265,7 @@ defmodule Beacon.RuntimeRenderer.Loader do
 
     require Logger
 
-    Logger.info(
-      "[Beacon.RuntimeRenderer] Loaded #{length(handlers)} event handlers for site #{site}"
-    )
+    Logger.info("[Beacon.RuntimeRenderer] Loaded #{length(handlers)} event handlers for site #{site}")
   end
 
   @doc """
@@ -290,9 +282,7 @@ defmodule Beacon.RuntimeRenderer.Loader do
 
     require Logger
 
-    Logger.info(
-      "[Beacon.RuntimeRenderer] Loaded #{length(handlers)} info handlers for site #{site}"
-    )
+    Logger.info("[Beacon.RuntimeRenderer] Loaded #{length(handlers)} info handlers for site #{site}")
   end
 
   @doc """
@@ -337,9 +327,7 @@ defmodule Beacon.RuntimeRenderer.Loader do
           error ->
             require Logger
 
-            Logger.warning(
-              "[Beacon.RuntimeRenderer] Skipped error page #{error_page.status}: #{Exception.message(error)}"
-            )
+            Logger.warning("[Beacon.RuntimeRenderer] Skipped error page #{error_page.status}: #{Exception.message(error)}")
 
             :error
         end
@@ -350,9 +338,7 @@ defmodule Beacon.RuntimeRenderer.Loader do
 
     require Logger
 
-    Logger.info(
-      "[Beacon.RuntimeRenderer] Loaded #{loaded} error pages, skipped #{skipped} for site #{site}"
-    )
+    Logger.info("[Beacon.RuntimeRenderer] Loaded #{loaded} error pages, skipped #{skipped} for site #{site}")
   end
 
   @doc """
@@ -367,9 +353,7 @@ defmodule Beacon.RuntimeRenderer.Loader do
 
     require Logger
 
-    Logger.info(
-      "[Beacon.RuntimeRenderer] Loaded #{length(helpers)} snippet helpers for site #{site}"
-    )
+    Logger.info("[Beacon.RuntimeRenderer] Loaded #{length(helpers)} snippet helpers for site #{site}")
   end
 
   @doc """
@@ -401,13 +385,11 @@ defmodule Beacon.RuntimeRenderer.Loader do
   Fetches the component from the database and publishes it to ETS.
   """
   def reload_component(site, component_name) do
-    case Content.get_component_by(site, name: component_name) do
+    case Content.get_component_by(site, [name: component_name], preloads: [:attrs]) do
       nil ->
         require Logger
 
-        Logger.warning(
-          "[Beacon.RuntimeRenderer] Component #{component_name} not found for site #{site}"
-        )
+        Logger.warning("[Beacon.RuntimeRenderer] Component #{component_name} not found for site #{site}")
 
         :error
 
@@ -419,7 +401,9 @@ defmodule Beacon.RuntimeRenderer.Loader do
           site,
           component.name,
           component.template,
-          component.body || "", attrs: attrs_list)
+          component.body || "",
+          attrs: attrs_list
+        )
     end
   end
 
