@@ -242,6 +242,27 @@ defmodule Beacon.Actions.Interpreter do
     end
   end
 
+  # -- Host extensions (resolved via app config) --
+
+  defp execute_step(%{"action" => "control_pipeline"} = step, ctx) do
+    op = resolve_value(step["op"], ctx)
+    instance_id = resolve_value(step["instance_id"], ctx)
+
+    case Application.get_env(:beacon, :pipeline_action_handler) do
+      mod when is_atom(mod) and not is_nil(mod) ->
+        if Code.ensure_loaded?(mod) and function_exported?(mod, :control_pipeline, 2) do
+          mod.control_pipeline(op, instance_id)
+        else
+          Logger.warning("[Beacon.Actions] control_pipeline handler #{inspect(mod)} not available")
+        end
+
+      _ ->
+        Logger.warning("[Beacon.Actions] control_pipeline: no :pipeline_action_handler configured")
+    end
+
+    ctx
+  end
+
   # -- Unknown action (no-op with warning) --
 
   defp execute_step(%{"action" => action}, ctx) do

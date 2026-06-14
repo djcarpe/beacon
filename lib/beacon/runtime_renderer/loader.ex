@@ -300,6 +300,10 @@ defmodule Beacon.RuntimeRenderer.Loader do
         RuntimeRenderer.unpublish_page(site, page_id)
 
       page ->
+        # A page only compiles if its layout is already in the RuntimeRenderer.
+        # Load the layout first so a page published against a brand-new layout
+        # (e.g. via the admin UI before any reboot) is reachable immediately.
+        if is_binary(page.layout_id), do: reload_layout(site, page.layout_id)
         load_page(site, page)
     end
   end

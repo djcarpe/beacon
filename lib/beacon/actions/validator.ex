@@ -11,6 +11,7 @@ defmodule Beacon.Actions.Validator do
     validate
     conditional sequence
     custom
+    control_pipeline
   )
 
   @doc """
@@ -132,6 +133,10 @@ defmodule Beacon.Actions.Validator do
   end
   defp validate_step_fields("conditional", step, path, errors), do: require_field(step, "test", path, errors)
   defp validate_step_fields("custom", step, path, errors), do: require_field(step, "handler", path, errors)
+  defp validate_step_fields("control_pipeline", step, path, errors) do
+    errors = require_field(step, "op", path, errors)
+    require_field(step, "instance_id", path, errors)
+  end
   defp validate_step_fields("dispatch_event", step, path, errors), do: require_field(step, "event", path, errors)
   defp validate_step_fields("push_event", step, path, errors), do: require_field(step, "event", path, errors)
   defp validate_step_fields("track", step, path, errors), do: require_field(step, "event", path, errors)
