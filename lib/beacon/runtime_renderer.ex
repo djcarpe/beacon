@@ -470,7 +470,12 @@ defmodule Beacon.RuntimeRenderer do
         %{name: attr_name, opts: attr_opts}, acc ->
           case Keyword.get(attr_opts || [], :default) do
             nil -> acc
-            default -> Map.put(acc, String.to_existing_atom(attr_name), default)
+            # attr_name is a developer-defined component attr (bounded set from
+            # source-defined component definitions), so to_atom is safe here —
+            # to_existing_atom raised "not an already existing atom" and skipped
+            # any component whose attr name (e.g. "tone", "orientation") hadn't
+            # been interned yet, dropping it from the site at boot.
+            default -> Map.put(acc, String.to_atom(attr_name), default)
           end
 
         _, acc ->
