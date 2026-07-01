@@ -40,8 +40,10 @@ defmodule Beacon.Template.Markdown do
         render: [
           unsafe_: true
         ],
-        features: [
-          syntax_highlight_theme: syntax_highlight_theme
+        # mdex >= 0.11 replaced `features: [syntax_highlight_theme: ...]` with a
+        # top-level :syntax_highlight formatter option.
+        syntax_highlight: [
+          formatter: {:html_inline, theme: syntax_highlight_theme}
         ]
       )
 
