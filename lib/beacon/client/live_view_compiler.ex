@@ -334,13 +334,13 @@ defmodule Beacon.Client.LiveViewCompiler do
     |> String.replace("\"", "&quot;")
   end
 
-  defp html_escape(other), do: to_display_string(other)
+  defp html_escape(other), do: other |> to_display_string() |> html_escape()
 
   defp html_escape_attr(text) when is_binary(text) do
     String.replace(text, "\"", "&quot;")
   end
 
-  defp html_escape_attr(other), do: to_display_string(other)
+  defp html_escape_attr(other), do: other |> to_display_string() |> html_escape_attr()
 
   defp to_display_string(nil), do: ""
   defp to_display_string(value) when is_binary(value), do: value
@@ -349,6 +349,14 @@ defmodule Beacon.Client.LiveViewCompiler do
   defp to_display_string(true), do: "true"
   defp to_display_string(false), do: "false"
   defp to_display_string(value) when is_atom(value), do: Atom.to_string(value)
+
+  # Structs that implement String.Chars (Ash.CiString, Decimal, Date, …)
+  # render as their string form; inspect/1 is a debugging format and leaks
+  # struct syntax into the page (e.g. #Ash.CiString<"a@b.c">).
+  defp to_display_string(%_{} = value) do
+    if String.Chars.impl_for(value), do: to_string(value), else: inspect(value)
+  end
+
   defp to_display_string(value), do: inspect(value)
 
   @self_closing_tags ~w(area base br col embed hr img input link meta param source track wbr)
