@@ -4811,9 +4811,14 @@ defmodule Beacon.Content do
   @doc type: :graphql_endpoints
   @spec create_graphql_endpoint(map()) :: {:ok, GraphQLEndpoint.t()} | {:error, Changeset.t()}
   def create_graphql_endpoint(attrs) do
+    # Access syntax (attrs[:site]), NOT dot access: LiveAdmin submits
+    # string-keyed form params merged with %{"site" => site}, and dot
+    # access on a plain map raises :badkey for the missing atom key —
+    # so the || fallback below could never run and endpoint creation
+    # crashed from the admin UI.
     %GraphQLEndpoint{}
     |> GraphQLEndpoint.changeset(attrs)
-    |> repo(attrs.site || attrs["site"]).insert()
+    |> repo(attrs[:site] || attrs["site"]).insert()
   end
 
   @doc """
